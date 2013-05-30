@@ -1,0 +1,5 @@
+<szg_config>
+  <assign>
+    NULL SZG_INPUTSIM sim_type arDefaultInputSimulator
+  </assign>
+</szg_config>

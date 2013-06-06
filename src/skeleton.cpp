@@ -322,6 +322,14 @@ void postExchange( arMasterSlaveFramework& fw ) {
 void display( arMasterSlaveFramework& fw ) {
   // Load the navigation matrix.
   fw.loadNavMatrix();
+  
+  glPushMatrix();
+  arMatrix4 myHandMat = fw.getMatrix(1);
+  glTranslatef(myHandMat[12], myHandMat[13], myHandMat[14]);
+  glTranslatef(-3*myHandMat[8], -3*myHandMat[9], -3*myHandMat[10]);
+  glutSolidSphere(1,50,50);
+  glPopMatrix();
+  
   // Draw stuff.
   theEffector.draw();
   myDetector.draw();

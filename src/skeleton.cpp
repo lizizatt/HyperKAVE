@@ -17,15 +17,15 @@
 // Unit conversions.  Tracker (and cube screen descriptions) use feet.
 // Atlantis, for example, uses 1/2-millimeters, so the appropriate conversion
 // factor is 12*2.54*20.
-const float FEET_TO_LOCAL_UNITS = 1.;
+const double FEET_TO_LOCAL_UNITS = 1.;
 
 
 // Near & far clipping planes.
-const float nearClipDistance = .1*FEET_TO_LOCAL_UNITS;
-const float farClipDistance = 10000.*FEET_TO_LOCAL_UNITS;
+const double nearClipDistance = .1*FEET_TO_LOCAL_UNITS;
+const double farClipDistance = 10000.*FEET_TO_LOCAL_UNITS;
 
 //contant values
-const float PI = 3.14159;
+const double PI = 3.14159;
 double cherenkovElectronThreshold = .768; // in MeV
 double electronMass = 9.11e-31; //kilos  //ID -11 (11 = positron)
 double cherenkovMuonThreshold = 158.7; //MeV
@@ -34,12 +34,12 @@ double cherenkovPionThreshold = 209.7;  //MeV
 double pionMass = 2.483e-28;  //kilos  //ID is 211 / -211
 double speedOfLight = 299792458.; //in m/s
 //Sizing Constants
-static float RADIUS = 17 * 3.28;     //Constants for sizing IN FEED
-static float HEIGHT = 40 * 3.28;
-static float OUTERRADIUS = 17.61 * 3.28;  
-static float OUTERHEIGHT = 41.22*  3.28;
-static float innerDotRad = 0.3 * 3.28;
-static float outerDotRad = 0.2 * 3.28;
+static double RADIUS = 17 * 3.28;     //Constants for sizing IN FEED
+static double HEIGHT = 40 * 3.28;
+static double OUTERRADIUS = 17.61 * 3.28;  
+static double OUTERHEIGHT = 41.22*  3.28;
+static double innerDotRad = 0.3 * 3.28;
+static double outerDotRad = 0.2 * 3.28;
 static double threshold = 1.;
 
 //master debug mode variable
@@ -59,6 +59,9 @@ void debugText(string s){
 		cout << "\n";
 	}
 }
+double magnitude(arVector3 a){
+	return sqrt(a[0]*a[0] + a[1]*a[1] + a[2]*a[2]);
+}
 
 double dotProduct(arVector3 a, arVector3 b){
 	return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -69,20 +72,21 @@ arVector3 crossProduct(arVector3 a, arVector3 b){
 }
 
 arVector3 normalize(arVector3 a){
-	float mag = sqrt(pow(a[0],2)+pow(a[1],2)+pow(a[2],2));
+	double mag = sqrt(pow(a[0],2)+pow(a[1],2)+pow(a[2],2));
 	return arVector3(a[0]/mag,a[1]/mag,a[2]/mag);
 }
 
 //display function declarations (defined in functions section)
-void drawDisplay(int index, bool highlighted, char * content[10],int numLines, int startOffSetX, int startOffSetY, float scale);
+void drawDisplay(int index, bool highlighted, char * content[10],int numLines, int startOffSetX, int startOffSetY, double scale);
 void doInterface(arMasterSlaveFramework& framework);
 bool updateMenuIndexState(int i);
 
 //Class Declarations:  
 class dot {  // The class containing all the relevant information about each dot
 public:
-	float cx, cy, cz, dx, dy, dz, charge, time, radius;
-	dot(float x, float y, float z, float xd, float yd, float zd, float q, float t, float r) {
+	double cx, cy, cz, dx, dy, dz, charge, time, radius, number;
+	dot(double hit, double x, double y, double z, double xd, double yd, double zd, double q, double t, double r) {
+		number = hit;
 		cx = x * 3.28;
 		cy = y * 3.28;
 		cz = z * 3.28;
@@ -115,11 +119,11 @@ public:
 	vector<bool> haveRingPoints;
 	vector<bool> doDisplay;
 	vector<vector<ringPointHolder> > ringPoints;
-	vector<float> momentum;  //momentum (in MeV ? )
-	vector<float> energy; //in the case of time-compression (supernova file), each consecutive 3 entries in this will be vertex positions ... else, energy in MeV
+	vector<double> momentum;  //momentum (in MeV ? )
+	vector<double> energy; //in the case of time-compression (supernova file), each consecutive 3 entries in this will be vertex positions ... else, energy in MeV
 	vector<dot> dots;  //holds the inner cylinder
 	vector<dot> outerDots; //holds the outer cylinder
-	dotVector(vector<dot> in, vector<dot> outer, float st) {
+	dotVector(vector<dot> in, vector<dot> outer, double st) {
 		dots = in;
 		outerDots = outer;
 		startTime = st;
@@ -210,17 +214,24 @@ public:
 	arVector3 axis; //for rendering
 	
 	//these used to make vertex array at initialization
-	float length;
-	float vertical_radius;
-	float horizontal_radius;
-	float height;
-	float cap_width; 
+	double length;
+	double radius_upper;
+	double radius_lower;
+	double offset_upper;
+	double offset_lower;
+	double height;
 	
-	float num_subdivisions_ellipse;
-	float num_subdivisions_cap;
-	float num_slices;
+	GLfloat rectangle[];  //for top / bottom
+	double num_slices_width_rectangle;
+	double num_slices_length_rectangle;
 	
-	GLfloat verticies[];
+	GLfloat circle1[];  //for topleft/topright circlular piece
+	double num_slices_width_circle1;
+	double num_slices_length_circle1;
+	
+	GLfloat circle2[];  //for bottomleft / bottomright circlular piece
+	double num_slices_width_circle2;
+	double num_slices_length_circle2;
 	
 	Detector() : arInteractableThing() {}
     ~Detector() {}
@@ -231,19 +242,27 @@ public:
 
 void Detector::initialize(){  //will be drawn going down z axis, with up being y
 	//tunable parameters
-	num_subdivisions_ellipse = 50;
-	num_subdivisions_cap = 50;
-	num_slices = 50;
-	length = 49.490 * 3.28;
-	vertical_radius = 25.000 * 3.28;
-	horizontal_radius = 42.190/2 * 3.28;
-	height = 42.190 * 3.28;
-	cap_width = 23.5 * 3.28;
-
-	arVector3 previousPoint;
-	arVector3 currentPoint;
-	float z_stepSize = length / num_slices;
-	//first generate endcaps, as if we were doing it in super-k.	
+	num_slices_width_rectangle = 20;
+	num_slices_length_rectangle = 20;
+	num_slices_length_circle1 = 20;
+	num_slices_width_circle1 = 20;
+	num_slices_length_circle2 = 20;
+	num_slices_width_circle2 = 20;
+	
+	//constant sizing parameters
+	length = 49.500 * 3.28;
+	radius_upper   = 32 * 3.28;
+	radius_lower   = 30 * 3.28;
+	height = 48 * 3.28;
+	offset_upper =  8 * 3.28;
+	offset_lower =  6 * 3.28;
+	
+	//pack vertex arrays for all the diff parts ... one for top/bottom, one for topleft / topright, one for bottomleft/bottomright, one for end caps
+	//these will be placed such that 0,0,0 is at the "top left" corner (I have no better way to say it)
+	
+	//fill rectangle with length_slices + width_slices lines = 2 * size(FLOAT) in size
+//	rectangle = (new GLfloat(2 * num_slices_width_rectangle + 2 * num_slices_length_rectangle));
+	
 }
 void Detector::draw(arMasterSlaveFramework* fw){
 	glPushMatrix();
@@ -256,26 +275,25 @@ void Detector::draw(arMasterSlaveFramework* fw){
 			for(int numRows = 0; numRows < 2; numRows++){
 				glPushMatrix();
 					glTranslatef(length*numRows, 0,0);
-					//draw from precomputed vertex array defining one chunk of detector structure
-					
 					glColor3f(1,1,1);
-					
+					//draw wireframe!
+					/*
 					for(int doItTwice = 0; doItTwice < 2; doItTwice++){
-						float min_rad = sqrt( (cap_width / 2) * (cap_width / 2) + (height / 2) * (height / 2) );
-						float offset_angle = atan( (cap_width / 2) / (height / 2) );
-						float min_angle = -PI/2 + offset_angle + doItTwice * PI;
-						float max_angle = PI/2 -  offset_angle + doItTwice * PI;
+						double min_rad = sqrt( (cap_width / 2) * (cap_width / 2) + (height / 2) * (height / 2) );
+						double offset_angle = atan( (cap_width / 2) / (height / 2) );
+						double min_angle = -PI/2 + offset_angle + doItTwice * PI;
+						double max_angle = PI/2 -  offset_angle + doItTwice * PI;
 						for(int i = 0; i < num_subdivisions_ellipse; i++){
-							float angle = min_angle + (max_angle-min_angle) * (i / num_subdivisions_ellipse);
-							float prevx = min_rad * cos(angle);
-							float prevy = min_rad * sin(angle);
-							float prevz = 0;
-							for(float j = length/num_slices; j < length; j+= length/num_slices){
-								float z = j;
-								float y = min_rad * sin(angle);
-								float ellipse_factor = .01;  //this is a function of our horizontal radius versus our vertical radius
-								float k = 1 - ellipse_factor*sin((y+height/2) / height * PI); //this is the ellipse parameter controlling scaling of the radius.  factor of sin(angle)
-								float x = k * min_rad * cos(angle);
+							double angle = min_angle + (max_angle-min_angle) * (i / num_subdivisions_ellipse);
+							double prevx = min_rad * cos(angle);
+							double prevy = min_rad * sin(angle);
+							double prevz = 0;
+							for(double j = length/num_slices; j < length; j+= length/num_slices){
+								double z = j;
+								double y = min_rad * sin(angle);
+								double ellipse_factor = .01;  //this is a function of our horizontal radius versus our vertical radius
+								double k = 1 - ellipse_factor*sin((y+height/2) / height * PI); //this is the ellipse parameter controlling scaling of the radius.  factor of sin(angle)
+								double x = k * min_rad * cos(angle);
 								glBegin(GL_LINES);
 									glVertex3f(prevx,prevy,prevz);
 									glVertex3f(x,y,z);
@@ -293,7 +311,7 @@ void Detector::draw(arMasterSlaveFramework* fw){
 					
 					//wireframe top and bottom of the detector
 					for(int i = 0; i < 2; i++){
-						for(float j = 0; j < length; j+= length/num_slices){
+						for(double j = 0; j < length; j+= length/num_slices){
 							glBegin(GL_LINES);
 							glVertex3f(-cap_width/2, i*height - height/2, j);
 							glVertex3f(cap_width/2, i*height - height/2, j);
@@ -301,7 +319,7 @@ void Detector::draw(arMasterSlaveFramework* fw){
 						}
 					}
 					for(int i = 0; i < 2; i++){
-						for(float j = -cap_width/2; j <= cap_width/2; j+= cap_width / num_subdivisions_cap){
+						for(double j = -cap_width/2; j <= cap_width/2; j+= cap_width / num_subdivisions_cap){
 							glBegin(GL_LINES);
 							glVertex3f(j, i*height - height/2, 0);
 							glVertex3f(j, i*height-height/2, length);
@@ -363,16 +381,16 @@ double timeScaleFactor = .5;  //scale factor for playback.  At 1, length of the 
 double timeHolder1 = 0.0;
 bool doCylinderDivider = true;  //do outer detector true/false
 int autoPlay = 0;   //autoplay back = -1, autoplay forward = 1;
-float lastJoyStickMove = 0;  //last time the joystick was moved, used for double-press activation, not currently working
+double lastJoyStickMove = 0;  //last time the joystick was moved, used for double-press activation, not currently working
 bool joyStickMoveDir = true;  //last joystick move direction, true = right, false = left, not implemented
-float ax, az;
+double ax, az;
 int index;  //current location in the event list
 int indexTransfer;  
 vector<dotVector> dotVectors;     //Vector to hold all generated dot vectors in loaded order
 dotVector currentDots;               //Class to hold unknown number of dots (just wraps the dotVector)
 arVector3 currentPosition;
-float viewer_distance=100.0;
-float viewer_angle=0.0;
+double viewer_distance=100.0;
+double viewer_angle=0.0;
 bool l_button=false;
 bool r_button=false;
 arVector3 l_position;
@@ -399,11 +417,11 @@ int red_values [] =		{132	,74,	22,		4,		4,		6,		40,		115,	193,	249,	253,	249,	21
 int green_values [] =	{4		,12,	4,		124,	175,	184,	183,	114,	193,	249,	213,	191,	143,	129,	102,	33};    //g
 int blue_values [] =	{186	,178,	186,	186,	186,	86,		7,		0,		6,		21,		80,		1,		12,		12,		12,		12};   //b
 arVector3 dot::dotColor() {
-	float red, green, blue;
-	float numDivs = 16;
+	double red, green, blue;
+	double numDivs = 16;
 	int section = 0;
 	if(colorByCharge) {
-		float value = charge;
+		double value = charge;
 		if(value > 26.7) section = 15;
 		else if (value > 23.3) section = 14;
 		else if (value > 20.2) section = 13;
@@ -424,7 +442,7 @@ arVector3 dot::dotColor() {
 		blue = blue_values[section] / 255.0;
 		green = green_values[section] / 255.0;
 	} else {
-		float value = time;
+		double value = time;
 		/*
 		if(value > 1125) section = 16;
 		else if (value > 1110) section = 14;
@@ -484,11 +502,14 @@ arVector3 dot::dotColor() {
 }
 void dot::draw(bool isOD){
 	//cout << cx / 30.48 << " " << cy / 30.48 << " " << cz / 30.48 << "\n";
+	//if(cy > 0 && dy < 0){
+	//	cout <<"HIT:" << number << "|" << cx << " " << cy << " " << cz << " | " << dx << " " << dy << " " << dz << "\n";
+	//}
 	glPushMatrix();
-		float radius = innerDotRad;
-		float radiusScaleFactor = 1.;
+		double radius = innerDotRad;
+		double radiusScaleFactor = 1.;
 		if(doScaleByCharge && abs(charge) < 26.7){
-			float scaleMin = .5;
+			double scaleMin = .5;
 			if(doTimeCompressed){
 				scaleMin = .25;
 			}
@@ -500,14 +521,27 @@ void dot::draw(bool isOD){
 		//current direction is -z, want to rotate to vector <dx, dy, dz>
 		arVector3 currentDir(0,0,-1);
 		arVector3 targetDir = normalize(arVector3(dx,dy,dz));
-		arVector3 axisRotation = crossProduct(currentDir, targetDir);
-		float angle = acos(dotProduct(axisRotation, currentDir))*180/PI;
+		if(! (abs(dotProduct(targetDir, currentDir)) >= .99)){  //in case of end caps, don't need any rotation (trying to would break it)
+			arVector3 axisRotation = crossProduct(currentDir, targetDir);
+			double angle = acos(dotProduct(axisRotation, currentDir))*180/PI;
+			
+			glRotatef(angle, axisRotation[0], axisRotation[1], axisRotation[2]);
+		}
 		
-		glRotatef(angle, axisRotation[0], axisRotation[1], axisRotation[2]);
+		//test...move in direction of negative Z axis
+		//glTranslatef(0,0,-5);
 		
 		arVector3 myColor = dotColor();
 		glColor3f(myColor[0], myColor[1], myColor[2]);
 		gluDisk(quadObj,0,radius,20,1);
+		glColor3f(1,1,1);
+		glScalef(.001,.001,.001);
+		glLineWidth(4);
+		int n = 123;
+		char text[100]	;
+		sprintf(text, "%d", (int) number);
+		for (char * p = text; *p; p++)
+			glutStrokeCharacter(GLUT_STROKE_ROMAN, *p);
 	glPopMatrix();
 }
 
@@ -722,7 +756,7 @@ void RodEffector::draw(arMasterSlaveFramework& framework) const {
 }
 
 //function to draw a display.  Helper function for the GUI.  This will draw one display  with given parameters.
-void drawDisplay(int index, bool highlighted, char * content[10],int numLines, int startOffSetX, int startOffSetY, float scale){
+void drawDisplay(int index, bool highlighted, char * content[10],int numLines, int startOffSetX, int startOffSetY, double scale){
 	glPushMatrix();  //do one display ... test process
 	//for rotations, let's say we're 2 units away from the hand.
 	glColor3f(.75,.75,.75);
@@ -921,17 +955,17 @@ void doInterface(arMasterSlaveFramework& framework){
 void loadNextEvent(void) {
 	int hit;
 	arVector3 theta;
-	float x,y,z,q,t,xd,yd,zd;
+	double x,y,z,q,t,xd,yd,zd;
 	string type;
-	float filler;
-	float time;
-	float vx, vy,vz;
-	vector<float> particleType, dx, dy, dz, momentum, id;
+	double filler;
+	double time;
+	double vx, vy,vz;
+	vector<double> particleType, dx, dy, dz, momentum, id;
 
-	//float particleType, dx, dy, dz, momentum, id;
-	float particleType2, dx2, dy2, dz2, momentum2, id2;
+	//double particleType, dx, dy, dz, momentum, id;
+	double particleType2, dx2, dy2, dz2, momentum2, id2;
 	//momentum = 0;
-	float momentumHold = 0;
+	double momentumHold = 0;
 	vector<dot> dots;
 	vector<dot> outerDots;
 	bool debug = false;
@@ -939,16 +973,18 @@ void loadNextEvent(void) {
 		while (dataFile.good()) {
 			dataFile >> type;
 			if(type == "ID"){  //parse inner detector
-				dataFile >> hit >> x >> y >> z >> xd >> yd >> zd >> q >> t;
-				tempDot = dot(x,y,z, xd, yd, zd,q,t,innerDotRad);
+				dataFile >> filler >> hit >> x >> y >> z >> xd >> yd >> zd >> q >> t;
+				tempDot = dot(hit, x,y,z, xd, yd, zd,q,t,innerDotRad);
 				dots.push_back(tempDot);
+				//if(y > 0 && yd == -1)
+					//cout << hit << " " << x << " " << y << " " << z << "\n";
 			}
 			if(type == "OD"){  //parse outer detector
-				dataFile >> hit >> x >> y >> z >> xd >> yd >> zd >> q >> t;
+				dataFile >> filler >> hit >> x >> y >> z >> xd >> yd >> zd >> q >> t;
 				x = x / 100.0;
 				y = y / 100.0;
 				z = z * 20.0 / 1810.0 + 20.0;
-				tempDot = dot(x,y,z,xd, yd, zd,q,t,outerDotRad);
+				tempDot = dot(hit, x,y,z,xd, yd, zd,q,t,outerDotRad);
 				outerDots.push_back(tempDot);
 			}
 			if(type == "TIME"){ //parse time info
@@ -1105,7 +1141,7 @@ void readInFile(arMasterSlaveFramework& fw){
 
 	//file is read by now.  Now we're going to go ahead and compress events if we're doing time compression
 
-	float timeStep = .05;
+	double timeStep = .05;
 	index = 0;
 	if(doTimeCompressed){  //here we have to compress all events in to a smaller number of events
 		vector<dotVector> newDotVectors;
@@ -1202,8 +1238,8 @@ arMatrix4 squareMatrixTransfer;
 bool start( arMasterSlaveFramework& framework, arSZGClient& /*cli*/ ) {
   // Register shared memory.
   //  framework.addTransferField( char* name, void* address, arDataType type, int numElements ); e.g.
-  framework.addTransferField("squareHighlighted", &squareHighlightedTransfer, AR_INT, 1);
-  framework.addTransferField("squareMatrix", squareMatrixTransfer.v, AR_FLOAT, 16);
+	framework.addTransferField("squareHighlighted", &squareHighlightedTransfer, AR_INT, 1);
+	framework.addTransferField("squareMatrix", squareMatrixTransfer.v, AR_FLOAT, 16);
 	framework.addTransferField("indexTransferField",&index,AR_INT,1);
 	framework.addTransferField("autoPlayTransfer",&autoPlay,AR_INT,1);
 	framework.addTransferField("colorByChargeTransfer",&colorByCharge,AR_INT,1);

@@ -43,7 +43,7 @@ static double outerDotRad = 0.2 * 3.28;
 static double threshold = 1.;
 
 //master debug mode variable
-bool debug = false;
+bool debug = true;
 //global function definitions (mostly utility)
 //definition of absolute value
 double abs(double in){
@@ -221,26 +221,36 @@ public:
 	double offset_lower;
 	double height;
 	
-	GLfloat rectangle[];  //for top / bottom
+	GLfloat * rectangle1;  //for top
+	GLfloat * rectangle2;  //for bottom
 	double num_slices_width_rectangle;
 	double num_slices_length_rectangle;
 	
-	GLfloat circle1[];  //for topleft/topright circlular piece
+	GLfloat * circle1;  //for topleft/topright circlular piece
 	double num_slices_width_circle1;
 	double num_slices_length_circle1;
 	
-	GLfloat circle2[];  //for bottomleft / bottomright circlular piece
+	GLfloat * circle2;  //for bottomleft / bottomright circlular piece
 	double num_slices_width_circle2;
 	double num_slices_length_circle2;
 	
+	GLfloat * cap;
+	//will automatically just join the lines of the surrounding pieces
+	
 	Detector() : arInteractableThing() {}
-    ~Detector() {}
+    ~Detector() {
+		delete [] rectangle1;
+		delete [] rectangle2;
+		delete [] circle1;
+		delete [] circle2;
+	}
 	
 	void initialize(); //populates vertex arrays
     void draw( arMasterSlaveFramework* fw=0 );
 };
 
 void Detector::initialize(){  //will be drawn going down z axis, with up being y
+	debugText("Started detector initialization");
 	//tunable parameters
 	num_slices_width_rectangle = 20;
 	num_slices_length_rectangle = 20;
@@ -261,97 +271,279 @@ void Detector::initialize(){  //will be drawn going down z axis, with up being y
 	//these will be placed such that 0,0,0 is at the "top left" corner (I have no better way to say it)
 	
 	//fill rectangle with length_slices + width_slices lines = 2 * size(FLOAT) in size
-//	rectangle = (new GLfloat(2 * num_slices_width_rectangle + 2 * num_slices_length_rectangle));
+	//rectangle1 = new GLfloat(3 * (2 * num_slices_width_rectangle + 2 * num_slices_length_rectangle));
+	rectangle1 = (GLfloat*) malloc(4 * 3 * (2 * num_slices_width_rectangle + 2 * num_slices_length_rectangle) );
+	int addressCounter = 0;
+	float holder_length = sqrt(radius_upper*radius_upper - height * height / 4);
+	float rtop = holder_length - offset_upper;
+	float width = 2*rtop;
+	for(int i = 0; i < 3 * (2 * num_slices_width_rectangle + 2 * num_slices_length_rectangle); i++){ //clear array
+		rectangle1[i] = 0;
+	} 
+	for(float i = 0; i <= width; i+= width/(num_slices_width_rectangle - 1)){
+		//i denotes a location in x
+		rectangle1[addressCounter] = i;
+		rectangle1[addressCounter + 1] = 0; 
+		rectangle1[addressCounter + 2] = 0;
+		rectangle1[addressCounter + 3] = i;
+		rectangle1[addressCounter + 4] = 0;
+		rectangle1[addressCounter + 5] = length;
+		addressCounter += 6;
+	}
+	for(float i = 0; i <= length; i+= length/(num_slices_length_rectangle - 1)){
+		//i denotes a location in z
+		rectangle1[addressCounter] = 0;
+		rectangle1[addressCounter + 1] = 0; 
+		rectangle1[addressCounter + 2] = i;
+		rectangle1[addressCounter + 3] = width;
+		rectangle1[addressCounter + 4] = 0;
+		rectangle1[addressCounter + 5] = i;
+		addressCounter += 6;
+	} //*/
 	
+	//fill rectangle with length_slices + width_slices lines = 2 * size(FLOAT) in size
+	//rectangle1 = new GLfloat(3 * (2 * num_slices_width_rectangle + 2 * num_slices_length_rectangle));
+	rectangle2 = (GLfloat*) malloc(4 * 3 * (2 * num_slices_width_rectangle + 2 * num_slices_length_rectangle) );
+	addressCounter = 0;
+	holder_length = sqrt(radius_lower*radius_lower - height * height / 4);
+	float rbottom = holder_length - offset_lower;
+	width = 2*rbottom;
+	for(int i = 0; i < 3 * (2 * num_slices_width_rectangle + 2 * num_slices_length_rectangle); i++){ //clear array
+		rectangle2[i] = 0;
+	} 
+	for(float i = 0; i <= width; i+= width/(num_slices_width_rectangle - 1)){
+		//i denotes a location in x
+		rectangle2[addressCounter] = i;
+		rectangle2[addressCounter + 1] = 0; 
+		rectangle2[addressCounter + 2] = 0;
+		rectangle2[addressCounter + 3] = i;
+		rectangle2[addressCounter + 4] = 0;
+		rectangle2[addressCounter + 5] = length;
+		addressCounter += 6;
+	}
+	for(float i = 0; i <= length; i+= length/(num_slices_length_rectangle - 1)){
+		//i denotes a location in z
+		rectangle2[addressCounter] = 0;
+		rectangle2[addressCounter + 1] = 0; 
+		rectangle2[addressCounter + 2] = i;
+		rectangle2[addressCounter + 3] = width;
+		rectangle2[addressCounter + 4] = 0;
+		rectangle2[addressCounter + 5] = i;
+		addressCounter += 6;
+	} //*/
+	
+	
+	//now for circle1
+	int size = 3 * (2 * num_slices_width_circle1 + 2 * num_slices_length_circle1 * num_slices_width_circle1);
+	circle1 = (GLfloat*) malloc(4 * size );
+	addressCounter = 0;
+	for (int i = 0; i < size; i++){
+		circle1[i] = 0;
+	}
+	float phi = asin(height / 2 / radius_upper);
+	for(float i = 0; i <= phi; i += phi / (num_slices_width_circle1 - 1)){
+		float xval = cos(i) * radius_upper;
+		float yval = sin(i) * radius_upper;
+		circle1[addressCounter] = xval - offset_upper;
+		circle1[addressCounter + 1] = yval; 
+		circle1[addressCounter + 2] = 0;
+		circle1[addressCounter + 3] = xval - offset_upper;
+		circle1[addressCounter + 4] = yval;
+		circle1[addressCounter + 5] = length;
+		addressCounter += 6;
+	}
+	for(float i = 0; i <= length; i += length / (num_slices_length_circle1 - 1 )){
+		float lastX = radius_upper - offset_upper;
+		float lastY = 0;
+		for(float j = phi / (num_slices_width_circle1 - 1); j <= phi; j += phi / (num_slices_width_circle1 - 1)){
+			float xval = cos(j) * radius_upper;
+			float yval = sin(j) * radius_upper;
+			circle1[addressCounter] = xval - offset_upper;
+			circle1[addressCounter + 1] = yval; 
+			circle1[addressCounter + 2] = i;
+			circle1[addressCounter + 3] = lastX;
+			circle1[addressCounter + 4] = lastY;
+			circle1[addressCounter + 5] = i;
+			addressCounter += 6;
+			lastX = xval - offset_upper;
+			lastY = yval;
+		}
+	}
+	
+	//now for circle2
+	size = 3 * (2 * num_slices_width_circle2 + 2 * num_slices_length_circle2 * num_slices_width_circle2);
+	circle2 = (GLfloat*) malloc(4 * size );
+	addressCounter = 0;
+	for (int i = 0; i < size; i++){
+		circle2[i] = 0;
+	}
+	phi = asin(height / 2 / radius_lower);
+	for(float i = 0; i <= phi; i += phi / (num_slices_width_circle2 - 1)){
+		float xval = cos(i) * radius_lower;
+		float yval = -sin(i) * radius_lower;
+		circle2[addressCounter] = xval - offset_lower;
+		circle2[addressCounter + 1] = yval; 
+		circle2[addressCounter + 2] = 0;
+		circle2[addressCounter + 3] = xval - offset_lower;
+		circle2[addressCounter + 4] = yval;
+		circle2[addressCounter + 5] = length;
+		addressCounter += 6;
+	}
+	for(float i = 0; i <= length; i += length / (num_slices_length_circle2 - 1 )){
+		float lastX = radius_lower - offset_lower;
+		float lastY = 0;
+		for(float j = phi / (num_slices_width_circle2 - 1); j <= phi; j += phi / (num_slices_width_circle2 - 1)){
+			float xval = cos(j) * radius_lower;
+			float yval = -sin(j) * radius_lower;
+			circle2[addressCounter] = xval - offset_lower;
+			circle2[addressCounter + 1] = yval; 
+			circle2[addressCounter + 2] = i;
+			circle2[addressCounter + 3] = lastX;
+			circle2[addressCounter + 4] = lastY;
+			circle2[addressCounter + 5] = i;
+			addressCounter += 6;
+			lastX = xval - offset_lower;
+			lastY = yval;
+		}
+	}
+	
+	
+	
+	//now for end caps!
+	size = 3 * (2 * num_slices_width_rectangle + 2 * num_slices_width_circle1 + 2 * num_slices_width_circle2  + 4 * num_slices_width_circle1);
+	cap = (GLfloat*) malloc(4 * size);
+	addressCounter = 0;
+	for(int i = 0; i < size; i++){
+		cap[i] = 0;
+	}
+	for(float i = 0; i < num_slices_width_rectangle; i++){
+		cap[addressCounter] = i*2*rtop / (num_slices_width_rectangle - 1) - rtop;
+		cap[addressCounter + 1] = height/2; 
+		cap[addressCounter + 2] = 0;
+		cap[addressCounter + 3] = 2*i*rbottom / (num_slices_width_rectangle - 1) - rbottom;
+		cap[addressCounter + 4] = -height/2;
+		cap[addressCounter + 5] = 0;
+		addressCounter += 6;
+	}
+	phi = asin(height / 2 / radius_upper);
+	float phi_upper = phi;
+	for(float i = 0; i <= phi; i += phi / (num_slices_width_circle1 - 1)){
+		float xval = cos(i) * radius_upper;
+		float yval = sin(i) * radius_upper;
+		cap[addressCounter] = xval - offset_upper;
+		cap[addressCounter + 1] = yval; 
+		cap[addressCounter + 2] = 0;
+		cap[addressCounter + 3] = -xval + offset_upper;
+		cap[addressCounter + 4] = yval;
+		cap[addressCounter + 5] = 0;
+		addressCounter += 6;
+	}
+	phi = asin(height / 2 / radius_lower);
+	float phi_lower = phi;
+	for(float i = 0; i <= phi; i += phi / (num_slices_width_circle2 - 1)){
+		float xval = cos(i) * radius_lower;
+		float yval = -sin(i) * radius_lower;
+		cap[addressCounter] = xval - offset_lower;
+		cap[addressCounter + 1] = yval; 
+		cap[addressCounter + 2] = 0;
+		cap[addressCounter + 3] = -xval + offset_lower;
+		cap[addressCounter + 4] = yval;
+		cap[addressCounter + 5] = 0;
+		addressCounter += 6;
+	}
+	for(float i = 0; i < num_slices_width_circle1; i++){
+		float xval_upper = cos( phi_upper * i / (num_slices_width_circle1 - 1)) * radius_upper;
+		float yval_upper = sin( phi_upper * i / (num_slices_width_circle1 - 1)) * radius_upper;
+		float xval_lower = cos( phi_lower * i / (num_slices_width_circle1 - 1)) * radius_lower;
+		float yval_lower = -sin( phi_lower * i / (num_slices_width_circle1 - 1)) * radius_lower;
+		cap[addressCounter] = xval_upper - offset_upper;
+		cap[addressCounter + 1] = yval_upper; 
+		cap[addressCounter + 2] = 0;
+		cap[addressCounter + 3] = xval_lower - offset_lower;
+		cap[addressCounter + 4] = yval_lower;
+		cap[addressCounter + 5] = 0;
+		addressCounter += 6;
+	}
+	for(float i = 0; i < num_slices_width_circle1; i++){
+		float xval_upper = cos( phi_upper * i / (num_slices_width_circle1 - 1)) * radius_upper;
+		float yval_upper = sin( phi_upper * i / (num_slices_width_circle1 - 1)) * radius_upper;
+		float xval_lower = cos( phi_lower * i / (num_slices_width_circle1 - 1)) * radius_lower;
+		float yval_lower = sin( phi_lower * i / (num_slices_width_circle1 - 1)) * radius_lower;
+		cap[addressCounter] = -xval_upper + offset_upper;
+		cap[addressCounter + 1] = yval_upper; 
+		cap[addressCounter + 2] = 0;
+		cap[addressCounter + 3] = -xval_lower + offset_lower;
+		cap[addressCounter + 4] = -yval_lower;
+		cap[addressCounter + 5] = 0;
+		addressCounter += 6;
+	}
+	
+
+	
+	debugText("ended detector initialization \n");
 }
 void Detector::draw(arMasterSlaveFramework* fw){
+	debugText("Started detector draw");
 	glPushMatrix();
-	//offet to get us placed properly
-	glRotatef(180, 0, 1, 0);
-	glTranslatef(0,0,-length/2);
-	for(int numCavernsPerRow = 0; numCavernsPerRow < 5; numCavernsPerRow++){
+		//offet to get us placed properly
+		glRotatef(180, 0, 1, 0);
+		glTranslatef(0,0,-length/2);
+		glColor3f(1,1,1);
+		glutSolidSphere(5,5,5);
+		//draw detector
+		glEnableClientState(GL_VERTEX_ARRAY);
+		//draw top
 		glPushMatrix();
-			glTranslatef(0,0,length*numCavernsPerRow);
-			for(int numRows = 0; numRows < 2; numRows++){
-				glPushMatrix();
-					glTranslatef(length*numRows, 0,0);
-					glColor3f(1,1,1);
-					//draw wireframe!
-					/*
-					for(int doItTwice = 0; doItTwice < 2; doItTwice++){
-						double min_rad = sqrt( (cap_width / 2) * (cap_width / 2) + (height / 2) * (height / 2) );
-						double offset_angle = atan( (cap_width / 2) / (height / 2) );
-						double min_angle = -PI/2 + offset_angle + doItTwice * PI;
-						double max_angle = PI/2 -  offset_angle + doItTwice * PI;
-						for(int i = 0; i < num_subdivisions_ellipse; i++){
-							double angle = min_angle + (max_angle-min_angle) * (i / num_subdivisions_ellipse);
-							double prevx = min_rad * cos(angle);
-							double prevy = min_rad * sin(angle);
-							double prevz = 0;
-							for(double j = length/num_slices; j < length; j+= length/num_slices){
-								double z = j;
-								double y = min_rad * sin(angle);
-								double ellipse_factor = .01;  //this is a function of our horizontal radius versus our vertical radius
-								double k = 1 - ellipse_factor*sin((y+height/2) / height * PI); //this is the ellipse parameter controlling scaling of the radius.  factor of sin(angle)
-								double x = k * min_rad * cos(angle);
-								glBegin(GL_LINES);
-									glVertex3f(prevx,prevy,prevz);
-									glVertex3f(x,y,z);
-								glEnd();
-								prevx = x;
-								prevy = y;
-								prevz = z;
-							}
-						}
-						for(int i = 0; i < num_subdivisions_ellipse; i++){
-							
-						}
-					}
-					
-					
-					//wireframe top and bottom of the detector
-					for(int i = 0; i < 2; i++){
-						for(double j = 0; j < length; j+= length/num_slices){
-							glBegin(GL_LINES);
-							glVertex3f(-cap_width/2, i*height - height/2, j);
-							glVertex3f(cap_width/2, i*height - height/2, j);
-							glEnd();    
-						}
-					}
-					for(int i = 0; i < 2; i++){
-						for(double j = -cap_width/2; j <= cap_width/2; j+= cap_width / num_subdivisions_cap){
-							glBegin(GL_LINES);
-							glVertex3f(j, i*height - height/2, 0);
-							glVertex3f(j, i*height-height/2, length);
-							glEnd();   
-						} 		
-					}
-					
-					//wireframe caps are drawn per frame since it's a lot cleaner this way:
-					
-					/*
-					for(int i = 0; i < 2; i++){
-						for(double j = PI/num_subdivisions_cap; j < PI; j+=(2*PI/num_subdivisions_cap)){
-							glBegin(GL_LINES);
-							glVertex3f(cap_width*cos(j),cap_width*sin(j),i*height-0.1);
-							glVertex3f(cap_width*cos(j),-cap_width*sin(j),i*height-0.1);
-							glEnd();    
-						}
-					}
-					for(int i = 0; i < 2; i++){
-						for(double j = PI/num_subdivisions_cap; j < 2*PI; j+=(2*PI/num_subdivisions_cap)){
-							glBegin(GL_LINES);
-							glVertex3f(cap_width*cos(j),cap_width*sin(j),i*height-0.1);
-							glVertex3f(-cap_width*cos(j),cap_width*sin(j),i*height-0.1);
-							glEnd();   
-						} 		
-					}*/
-					
-				glPopMatrix();
-			}	
+			float holder_length = sqrt(radius_upper*radius_upper - height * height / 4);
+			float rtop = holder_length - offset_upper;
+			glTranslatef(-rtop, height / 2, 0);
+			glVertexPointer(3, GL_FLOAT, 0, rectangle1);
+			glDrawArrays(GL_LINES, 0, num_slices_width_rectangle * 2 + num_slices_length_rectangle * 2);
 		glPopMatrix();
-	}
+		
+		//draw bottom
+		glPushMatrix();
+			holder_length = sqrt(radius_lower*radius_lower - height * height / 4);
+			float rbottom = holder_length - offset_lower;
+			glTranslatef((-radius_upper + offset_upper) / 2, - height / 2, 0);
+			glVertexPointer(3, GL_FLOAT, 0, rectangle2);
+			glDrawArrays(GL_LINES, 0, num_slices_width_rectangle * 2 + num_slices_length_rectangle * 2);
+		glPopMatrix();
+		
+		//draw upper circles
+		glPushMatrix();
+			glVertexPointer(3, GL_FLOAT, 0, circle1);
+			glDrawArrays(GL_LINES, 0, (2 * num_slices_width_circle1 + 2 * num_slices_length_circle1 * num_slices_width_circle1));
+			glRotatef(180, 0, 1, 0);
+			glTranslatef(0,0,-length);
+			glDrawArrays(GL_LINES, 0, (2 * num_slices_width_circle1 + 2 * num_slices_length_circle1 * num_slices_width_circle1));
+		glPopMatrix();
+		
+		//draw upper circles
+		glPushMatrix();
+			glVertexPointer(3, GL_FLOAT, 0, circle2);
+			glDrawArrays(GL_LINES, 0, (2 * num_slices_width_circle2 + 2 * num_slices_length_circle2 * num_slices_width_circle2));
+			glRotatef(180, 0, 1, 0);
+			glTranslatef(0,0,-length);
+			glDrawArrays(GL_LINES, 0, (2 * num_slices_width_circle2 + 2 * num_slices_length_circle2 * num_slices_width_circle2));
+		glPopMatrix();
+		
+		glPushMatrix();
+			glVertexPointer(3, GL_FLOAT, 0, cap);
+			glDrawArrays(GL_LINES, 0, (2 * num_slices_width_rectangle + 2 * num_slices_width_circle1 + 2 * num_slices_width_circle2  + 4 * num_slices_width_circle1));
+			
+			glTranslatef(0,0,length);
+			glDrawArrays(GL_LINES, 0, (2 * num_slices_width_rectangle + 2 * num_slices_width_circle1 + 2 * num_slices_width_circle2  + 4 * num_slices_width_circle1));
+		glPopMatrix();
+		
+		
+		
+		
+		
+		//fin with drawing detector
+		glDisableClientState(GL_VERTEX_ARRAY);
 	glPopMatrix();
+	debugText("ended detector draw \n");
 }
 
 // End of classes
@@ -1572,5 +1764,5 @@ int main(int argc, char** argv) {
 	}
 
 	// Never returns unless something goes wrong
-	return framework.start() ? 0 : 1;
+	framework.start() ? 0 : 1;
 }
